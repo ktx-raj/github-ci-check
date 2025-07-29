@@ -107,50 +107,6 @@ jobs:
             core.setOutput('original_notes', releaseNotes);
             core.setOutput('cleaned_notes', cleanedNotes);
             
-      - name: Update or create release with cleaned notes
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const tagName = '${{ steps.clean_notes.outputs.tag_name }}';
-            const cleanedNotes = `${{ steps.clean_notes.outputs.cleaned_notes }}`;
-            
-            try {
-              // Try to get existing release
-              const { data: existingRelease } = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag: tagName
-              });
-              
-              // Update existing release
-              const { data: updatedRelease } = await github.rest.repos.updateRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: existingRelease.id,
-                body: cleanedNotes
-              });
-              
-              console.log(`Updated release: ${updatedRelease.html_url}`);
-              
-            } catch (error) {
-              if (error.status === 404) {
-                // Create new release
-                const { data: newRelease } = await github.rest.repos.createRelease({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  tag_name: tagName,
-                  name: `Release ${tagName}`,
-                  body: cleanedNotes,
-                  draft: false,
-                  prerelease: false
-                });
-                
-                console.log(`Created new release: ${newRelease.html_url}`);
-              } else {
-                throw error;
-              }
-            }
-            
       - name: Display cleaned notes
         run: |
           echo "## Cleaned Release Notes for ${{ steps.clean_notes.outputs.tag_name }}"
