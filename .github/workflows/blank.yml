@@ -107,7 +107,23 @@ jobs:
             core.setOutput('original_notes', releaseNotes);
             core.setOutput('cleaned_notes', cleanedNotes);
             
+      - name: Save cleaned notes as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleaned-release-notes-${{ steps.clean_notes.outputs.tag_name }}
+          path: |
+            cleaned_notes.txt
+        if: always()
+        
+      - name: Create cleaned notes file
+        run: |
+          echo "${{ steps.clean_notes.outputs.cleaned_notes }}" > cleaned_notes.txt
       - name: Display cleaned notes
         run: |
+          echo "## Original Release Notes for ${{ steps.clean_notes.outputs.tag_name }}"
+          echo "${{ steps.clean_notes.outputs.original_notes }}"
+          echo ""
           echo "## Cleaned Release Notes for ${{ steps.clean_notes.outputs.tag_name }}"
           echo "${{ steps.clean_notes.outputs.cleaned_notes }}"
+          echo ""
+          echo "✅ Cleaned notes saved as artifact: cleaned-release-notes-${{ steps.clean_notes.outputs.tag_name }}"
