@@ -1,54 +1,157 @@
-name: Get Release Info with Error Handling
-on: [push]
+name: Clean Release Notes
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name to process (optional - uses latest if not provided)'
+        required: false
+        type: string
 
 jobs:
-  get-release:
+  clean-release-notes:
     runs-on: ubuntu-latest
     steps:
-      - name: Check for releases and get latest
-        id: release_check
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Get release notes and clean them
+        id: clean_notes
         uses: actions/github-script@v7
         with:
           script: |
-            try {
-              // First, check if any releases exist
-              const { data: releases } = await github.rest.repos.listReleases({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                per_page: 1
-              });
-              
-              if (releases.length === 0) {
-                console.log('No releases found in this repository');
-                core.setOutput('has_releases', 'false');
-                core.setOutput('version', 'No releases');
-                core.setOutput('name', 'No releases found');
-                core.setOutput('body', 'This repository has no releases yet');
-                return;
+            let tagName = '';
+            let releaseNotes = '';
+            
+            // Determine which release to process
+            if (context.eventName === 'workflow_dispatch' && context.payload.inputs.tag_name) {
+              tagName = context.payload.inputs.tag_name;
+            } else if (context.eventName === 'push' && context.ref.startsWith('refs/tags/')) {
+              tagName = context.ref.replace('refs/tags/', '');
+            } else {
+              // Get latest release
+              try {
+                const { data: release } = await github.rest.repos.getLatestRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo
+                });
+                tagName = release.tag_name;
+              } catch (error) {
+                if (error.status === 404) {
+                  console.log('No releases found. Creating release notes from commits...');
+                  // Generate from commits since last tag or all commits
+                  const commits = await github.rest.repos.listCommits({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    per_page: 50
+                  });
+                  
+                  releaseNotes = commits.data.map(commit => {
+                    const message = commit.commit.message.split('\n')[0];
+                    return `- ${message}`;
+                  }).join('\n');
+                  
+                  tagName = 'v1.0.0'; // Default tag for first release
+                } else {
+                  throw error;
+                }
               }
-              
-              // Get the latest release
-              const { data: release } = await github.rest.repos.getLatestRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo
-              });
-              
-              core.setOutput('has_releases', 'true');
-              core.setOutput('version', release.tag_name);
-              core.setOutput('name', release.name);
-              core.setOutput('body', release.body);
-              
-            } catch (error) {
-              console.log(`Error: ${error.message}`);
-              core.setOutput('has_releases', 'false');
-              core.setOutput('version', 'Error fetching releases');
-              core.setOutput('name', 'Error');
-              core.setOutput('body', error.message);
             }
             
-      - name: Display results
+            // If we don't have release notes yet, get them from the release
+            if (!releaseNotes) {
+              try {
+                const { data: release } = await github.rest.repos.getReleaseByTag({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag: tagName
+                });
+                releaseNotes = release.body || '';
+              } catch (error) {
+                console.log(`Release ${tagName} not found, will create new one`);
+                releaseNotes = ''; // Will be generated from commits
+              }
+            }
+            
+            // Clean the release notes - remove "by @username" and PR numbers
+            function cleanReleaseNotes(notes) {
+              return notes
+                .split('\n')
+                .map(line => {
+                  // Remove "by @username in #XXXX" pattern
+                  let cleaned = line.replace(/\s+by\s+@[\w-]+\s+in\s+#\d+/g, '');
+                  
+                  // Alternative: Remove just "by @username" (keeps PR numbers)
+                  // let cleaned = line.replace(/\s+by\s+@[\w-]+/g, '');
+                  
+                  // Remove trailing whitespace
+                  cleaned = cleaned.trim();
+                  
+                  return cleaned;
+                })
+                .filter(line => line.length > 0) // Remove empty lines
+                .join('\n');
+            }
+            
+            const cleanedNotes = cleanReleaseNotes(releaseNotes);
+            
+            console.log('Original notes length:', releaseNotes.length);
+            console.log('Cleaned notes length:', cleanedNotes.length);
+            console.log('Cleaned notes preview:', cleanedNotes.substring(0, 500));
+            
+            // Set outputs
+            core.setOutput('tag_name', tagName);
+            core.setOutput('original_notes', releaseNotes);
+            core.setOutput('cleaned_notes', cleanedNotes);
+            
+      - name: Update or create release with cleaned notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tagName = '${{ steps.clean_notes.outputs.tag_name }}';
+            const cleanedNotes = `${{ steps.clean_notes.outputs.cleaned_notes }}`;
+            
+            try {
+              // Try to get existing release
+              const { data: existingRelease } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: tagName
+              });
+              
+              // Update existing release
+              const { data: updatedRelease } = await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: existingRelease.id,
+                body: cleanedNotes
+              });
+              
+              console.log(`Updated release: ${updatedRelease.html_url}`);
+              
+            } catch (error) {
+              if (error.status === 404) {
+                // Create new release
+                const { data: newRelease } = await github.rest.repos.createRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag_name: tagName,
+                  name: `Release ${tagName}`,
+                  body: cleanedNotes,
+                  draft: false,
+                  prerelease: false
+                });
+                
+                console.log(`Created new release: ${newRelease.html_url}`);
+              } else {
+                throw error;
+              }
+            }
+            
+      - name: Display cleaned notes
         run: |
-          echo "Has releases: ${{ steps.release_check.outputs.has_releases }}"
-          echo "Version: ${{ steps.release_check.outputs.version }}"
-          echo "Name: ${{ steps.release_check.outputs.name }}"
-          echo "Body: ${{ steps.release_check.outputs.body }}"
+          echo "## Cleaned Release Notes for ${{ steps.clean_notes.outputs.tag_name }}"
+          echo "${{ steps.clean_notes.outputs.cleaned_notes }}"
