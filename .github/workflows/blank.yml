@@ -2,11 +2,11 @@ name: Clean Release Notes
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag name to process (optional - uses latest if not provided)'
+        description: "Tag name to process (optional - uses latest if not provided)"
         required: false
         type: string
 
@@ -17,96 +17,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Get release notes and clean them
         id: clean_notes
         uses: actions/github-script@v7
         with:
           script: |
-            let tagName = '';
-            let releaseNotes = '';
-            
-            // Determine which release to process
-            if (context.eventName === 'workflow_dispatch' && context.payload.inputs.tag_name) {
-              tagName = context.payload.inputs.tag_name;
-            } else if (context.eventName === 'push' && context.ref.startsWith('refs/tags/')) {
-              tagName = context.ref.replace('refs/tags/', '');
-            } else {
-              // Get latest release
-              try {
-                const { data: release } = await github.rest.repos.getLatestRelease({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo
-                });
-                tagName = release.tag_name;
-              } catch (error) {
-                if (error.status === 404) {
-                  console.log('No releases found. Creating release notes from commits...');
-                  // Generate from commits since last tag or all commits
-                  const commits = await github.rest.repos.listCommits({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    per_page: 50
-                  });
-                  
-                  releaseNotes = commits.data.map(commit => {
-                    const message = commit.commit.message.split('\n')[0];
-                    return `- ${message}`;
-                  }).join('\n');
-                  
-                  tagName = 'v1.0.0'; // Default tag for first release
-                } else {
-                  throw error;
-                }
-              }
+            console.log('Sending release notification to console only...');
+            const release = context.payload.release;
+            console.log('Release notification triggered!');
+
+            // Clean function to remove "by @user in #1234" from the release body
+            function cleanBody(body) {
+              return body ? body.replace(/\s+by\s+@\S+\s+in\s+#\d+/g, '') : 'No release notes provided';
             }
-            
-            // If we don't have release notes yet, get them from the release
-            if (!releaseNotes) {
-              try {
-                const { data: release } = await github.rest.repos.getReleaseByTag({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  tag: tagName
-                });
-                releaseNotes = release.body || '';
-              } catch (error) {
-                console.log(`Release ${tagName} not found, will create new one`);
-                releaseNotes = ''; // Will be generated from commits
-              }
-            }
-            
-            // Clean the release notes - remove "by @username" and PR numbers
-            function cleanReleaseNotes(notes) {
-              return notes
-                .split('\n')
-                .map(line => {
-                  // Remove "by @username in #XXXX" pattern
-                  let cleaned = line.replace(/\s+by\s+@[\w-]+\s+in\s+#\d+/g, '');
-                  
-                  // Alternative: Remove just "by @username" (keeps PR numbers)
-                  // let cleaned = line.replace(/\s+by\s+@[\w-]+/g, '');
-                  
-                  // Remove trailing whitespace
-                  cleaned = cleaned.trim();
-                  
-                  return cleaned;
-                })
-                .filter(line => line.length > 0) // Remove empty lines
-                .join('\n');
-            }
-            
-            const cleanedNotes = cleanReleaseNotes(releaseNotes);
-            
-            console.log('Original notes length:', releaseNotes.length);
-            console.log('Cleaned notes length:', cleanedNotes.length);
-            console.log('Cleaned notes preview:', cleanedNotes.substring(0, 500));
-            
-            // Set outputs
-            core.setOutput('tag_name', tagName);
-            core.setOutput('original_notes', releaseNotes);
-            core.setOutput('cleaned_notes', cleanedNotes);
-            
+
+            const cleanedBody = cleanBody(release.body);
+
+            console.log('Release Details:', {
+              tag: release.tag_name,
+              name: release.name,
+              url: release.html_url,
+              created_at: release.created_at,
+              published_at: release.published_at,
+              original_body: release.body || 'No release notes provided',
+              cleaned_body: cleanedBody
+            });
+
       - name: Display cleaned notes
         run: |
           echo "## Cleaned Release Notes for ${{ steps.clean_notes.outputs.tag_name }}"
