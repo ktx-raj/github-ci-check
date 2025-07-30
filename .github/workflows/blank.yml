@@ -49,7 +49,7 @@ jobs:
 
             // Clean function to remove "by @user in #1234" from the release body
             function cleanBody(body) {
-              return body ? body.replace(/\s+by\s+@\S+\s+in\s+#\d+/g, '') : 'No release notes provided';
+              return body ? body.replace(/ by @\w+ in \w+/g, '') : 'No release notes provided';
             }
 
             const cleanedBody = cleanBody(release.body);
