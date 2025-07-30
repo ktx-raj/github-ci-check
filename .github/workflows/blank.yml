@@ -47,12 +47,22 @@ jobs:
             console.log('Sending release notification to console only...');
             console.log('Release notification triggered!');
 
-            // Clean function to remove "by @user in #1234" from the release body
-            function cleanBody(body) {
-              return body ? body.replace(/ by @\w+ in \w+/g, '') : 'No release notes provided';
+            function cleanChangelog(changelog) {
+              if (!changelog) return '';
+              return changelog
+                .split(/\r?\n/)
+                .map(line => {
+                  if (line.toLowerCase().includes('full changelog')) return '';
+                  line = line.replace(/by\s+@[\w-]+.*$/i, '');
+                  line = line.replace(/@\w+/g, '');
+                  line = line.replace(/\bhttps?:\/\/\S*pull\S*/gi, '');
+                  return line.trim();
+                })
+                .filter(line => line.length > 0)
+                .join('\n');
             }
 
-            const cleanedBody = cleanBody(release.body);
+            const cleanedBody = cleanChangelog(release.body);
 
             console.log('Release Details:', {
               tag: release.tag_name,
