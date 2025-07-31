@@ -46,15 +46,16 @@ jobs:
                       });
                       const payload = {
                         version: release.tag_name,
-                        name: release.name,
-                        body: cleanedBody || 'No release notes provided',
-                        url: release.html_url,
-                        created_at: release.created_at,
-                        published_at: release.published_at,
-                        repo: context.repo.repo,
-                        owner: context.repo.owner
+                        release_name: release.name,
+                        release_url: release.html_url,
+                        changeLog: cleanedBody || 'No release notes provided',
+                        repository: context.repo.repo,
+                        type: context.repo.owner,
+                        date: new Date().toISOString()
                       };
                       try {
+                      console.log('Payload to be sent:', JSON.stringify(payload, null, 2));
+                      console.log('Webhook URL:', process.env.WEBHOOK_URL);
                        const response = await fetch(`${process.env.WEBHOOK_URL}?status=draft`, {
                           method: 'POST',
                           headers: {
