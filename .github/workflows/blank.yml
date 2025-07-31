@@ -48,7 +48,7 @@ jobs:
                         version: release.tag_name,
                         release_name: release.name,
                         release_url: release.html_url,
-                        changeLog: cleanedBody || 'No release notes provided',
+                        changelog: cleanedBody || 'No release notes provided',
                         type: 'PUBLIC',
                         date: new Date().toISOString()
                       };
@@ -61,7 +61,7 @@ jobs:
                             'Authorization': `Bearer ${process.env.API_TOKEN}`,
                             'Content-Type': 'application/json'
                           },
-                          body: JSON.stringify(payload)
+                          body: JSON.stringify({data: payload})
                         });
 
                         if (!response.ok) {
