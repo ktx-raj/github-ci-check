@@ -1,80 +1,78 @@
-name: Clean Release Notes
+name: Release Webhook Notification
+
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      tag_name:
-        description: "Tag name to process (optional - uses latest if not provided)"
-        required: false
-        type: string
+    release:
+        types: [published]
 
 jobs:
-  clean-release-notes:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    notify-webhook:
+        runs-on: ubuntu-latest
+        environment: staging
 
-      - name: Get release notes and clean them
-        id: clean_notes
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: releases } = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              per_page: 1
-            });
-            
-            if (releases.length === 0) {
-              console.log('No releases found in this repository');
-              core.setOutput('has_releases', 'false');
-              core.setOutput('version', 'No releases');
-              core.setOutput('name', 'No releases found');
-              core.setOutput('body', 'This repository has no releases yet');
-              return;
-            }
-            
-            // Get the latest release
-            const { data: release } = await github.rest.repos.getLatestRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-            console.log('Sending release notification to console only...');
-            console.log('Release notification triggered!');
+            - name: Send release notification to webhook
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      console.log('Sending release notification to webhook...');
+                      const release = context.payload.release;
+                      console.log('Release notification triggered!');
+                      function cleanChangelog(changelog) {
+                        if (!changelog) return '';
+                        return changelog
+                          .split(/\r?\n/)
+                          .map(line => {
+                            if (line.toLowerCase().includes('full changelog')) return '';
+                            line = line.replace(/by\s+@[\w-]+.*$/i, '');
+                            line = line.replace(/@\w+/g, '');
+                            line = line.replace(/\bhttps?:\/\/\Spull\S/gi, '');
+                            return line.trim();
+                          })
+                          .filter(line => line.length > 0)
+                          .join('\n');
+                      }
 
-            function cleanChangelog(changelog) {
-              if (!changelog) return '';
-              return changelog
-                .split(/\r?\n/)
-                .map(line => {
-                  if (line.toLowerCase().includes('full changelog')) return '';
-                  line = line.replace(/by\s+@[\w-]+.*$/i, '');
-                  line = line.replace(/@\w+/g, '');
-                  line = line.replace(/\bhttps?:\/\/\S*pull\S*/gi, '');
-                  return line.trim();
-                })
-                .filter(line => line.length > 0)
-                .join('\n');
-            }
+                      const cleanedBody = cleanChangelog(release.body);
+                      console.log('Release Details:', {
+                        tag: release.tag_name,
+                        name: release.name,
+                        url: release.html_url,
+                        created_at: release.created_at,
+                        published_at: release.published_at,
+                        body: cleanedBody || 'No release notes provided'
+                      });
+                      const payload = {
+                        version: release.tag_name,
+                        name: release.name,
+                        body: cleanedBody || 'No release notes provided',
+                        url: release.html_url,
+                        created_at: release.created_at,
+                        published_at: release.published_at,
+                        repo: context.repo.repo,
+                        owner: context.repo.owner
+                      };
+                      try {
+                       const response = await fetch(`${process.env.WEBHOOK_URL}?status=draft`, {
+                          method: 'POST',
+                          headers: {
+                            'Authorization': `Bearer ${process.env.API_TOKEN}`,
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify(payload)
+                        });
 
-            const cleanedBody = cleanChangelog(release.body);
+                        if (!response.ok) {
+                          throw new Error(`Webhook request failed: ${response.status} ${response.statusText}`);
+                        }
 
-            console.log('Release Details:', {
-              tag: release.tag_name,
-              name: release.name,
-              url: release.html_url,
-              created_at: release.created_at,
-              published_at: release.published_at,
-              original_body: release.body || 'No release notes provided',
-              cleaned_body: cleanedBody
-            });
-
-      - name: Display cleaned notes
-        run: |
-          echo "## Cleaned Release Notes for ${{ steps.clean_notes.outputs.tag_name }}"
-          echo "${{ steps.clean_notes.outputs.cleaned_notes }}"
+                        console.log('Response status:', response.status);
+                      } catch (error) {
+                        console.error('Failed to send webhook notification:', error);
+                        core.setFailed(error.message);
+                      }
+              env:
+                WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+                API_TOKEN: ${{ secrets.API_TOKEN }}
