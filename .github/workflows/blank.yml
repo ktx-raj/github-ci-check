@@ -49,8 +49,7 @@ jobs:
                         release_name: release.name,
                         release_url: release.html_url,
                         changeLog: cleanedBody || 'No release notes provided',
-                        repository: context.repo.repo,
-                        type: context.repo.owner,
+                        type: 'PUBLIC',
                         date: new Date().toISOString()
                       };
                       try {
