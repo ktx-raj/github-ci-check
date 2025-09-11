@@ -10,7 +10,6 @@ jobs:
         environment: staging
         permissions:
           contents: read
-          releases: write
 
         steps:
             - name: Checkout repository
