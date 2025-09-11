@@ -46,25 +46,7 @@ jobs:
                     type: 'ENTERPRISE',
                     date: release.published_at
                   };
-                  try {
-                    const response = await fetch(`${process.env.STRAPI_WEBHOOK_URL}/api/github-releases?status=draft`, {
-                      method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${process.env.STRAPI_API_TOKEN}`,
-                        'Content-Type': 'application/json'
-                      },
-                      body: JSON.stringify({data: payload})
-                    });
-
-                    if (!response.ok) {
-                      throw new Error(`Webhook request failed: ${response.status} ${response.statusText}`);
-                    }
-
-                    console.log('Response status:', response.status);
-                  } catch (error) {
-                    console.error('Failed to send webhook notification:', error);
-                    core.setFailed(error.message);
-                  }
+                  console.log('Payload:', cleanedBody);
               env:
                 STRAPI_WEBHOOK_URL: ${{ secrets.STRAPI_WEBHOOK_URL }}
                 STRAPI_API_TOKEN: ${{ secrets.STRAPI_API_TOKEN }}
