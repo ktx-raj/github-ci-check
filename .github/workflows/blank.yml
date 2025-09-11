@@ -28,13 +28,15 @@ jobs:
                   });
                   function cleanChangelog(changelog) {
                     if (!changelog) return '';
-                    return changelog.split(/\r?\n/).reduce((acc, line) => {
-                      if (line.toLowerCase().includes('new contributors')) return acc;
-                      if (line.toLowerCase().includes('full changelog')) return acc;
-                      line = line.replace(/by\s+@[\w-]+.*$/i, '').replace(/@\w+/g, '').replace(/\bhttps?:\/\/\S+/gi, '').trim();
-                      if (line.length > 0) acc.push(line);
-                      return acc;
-                    }, []).join('\n');
+                    const lines = changelog.split(/\r?\n/);
+                    const result = [];
+                    for (const line of lines) {
+                      if (line.toLowerCase().includes('new contributors')) break;
+                      if (line.toLowerCase().includes('full changelog')) continue;
+                      const cleanedLine = line.replace(/by\s+@[\w-]+.*$/i, '').replace(/@\w+/g, '').replace(/\bhttps?:\/\/\S+/gi, '').trim();
+                      if (cleanedLine.length > 0) result.push(cleanedLine);
+                    }
+                    return result.join('\n');
                   }
 
                   const cleanedBody = cleanChangelog(release.body);
