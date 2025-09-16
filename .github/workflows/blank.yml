@@ -33,6 +33,7 @@ jobs:
                     for (const line of lines) {
                       if (line.toLowerCase().includes('new contributors')) break;
                       if (line.toLowerCase().includes('full changelog')) continue;
+                      if (line.toLowerCase().includes('download binaries from')) continue;
                       const cleanedLine = line.replace(/by\s+@[\w-]+.*$/i, '').replace(/@\w+/g, '').replace(/\bhttps?:\/\/\S+/gi, '').trim();
                       if (cleanedLine.length > 0) result.push(cleanedLine);
                     }
